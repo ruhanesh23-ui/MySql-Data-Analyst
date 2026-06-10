@@ -1,40 +1,46 @@
--- EXPLORATORY DATA ANALYSIS (EDA)
+-- ============================================================
+-- PROJECT: Tech Layoffs Dataset — Exploratory Data Analysis
+-- Author:  Ruhanesh Suthan
+-- Tool:    MySQL
+-- Dataset: https://github.com/AlexTheAnalyst/MySQL-YouTube-Series
+-- ============================================================
 -- Goal:
--- Explore the cleaned layoffs dataset to identify trends,
--- patterns, outliers, and key business insights.
+--   Explore the cleaned layoffs dataset to uncover trends,
+--   patterns, and key business insights.
 --
--- Typical EDA questions:
--- - Which companies had the most layoffs?
--- - Which industries were hit hardest?
--- - Which countries experienced the largest layoffs?
--- - How did layoffs change over time?
--- - Who were the top companies by layoffs each year?
+-- Questions answered:
+--   - Which companies had the most total layoffs?
+--   - Which industries were hit hardest?
+--   - Which countries had the largest layoffs?
+--   - How did layoffs change month-over-month and year-over-year?
+--   - Who were the top 5 companies by layoffs each year?
+-- ============================================================
 
 
--- =========================================================
+-- ============================================================
 -- 1. VIEW CLEANED DATASET
--- =========================================================
+-- ============================================================
 
 SELECT *
 FROM layoffs_staging2;
 
 
--- =========================================================
--- 2. FIND MAXIMUM LAYOFF VALUES
--- =========================================================
--- Understand the largest layoff event in the dataset.
+-- ============================================================
+-- 2. OVERALL MAXIMUMS
+-- ============================================================
+-- Quick sanity check — what are the largest individual events?
 
 SELECT
-    MAX(total_laid_off) AS max_laid_off,
+    MAX(total_laid_off)      AS max_laid_off,
     MAX(percentage_laid_off) AS max_percentage_laid_off
 FROM layoffs_staging2;
 
 
--- =========================================================
--- 3. COMPANIES WITH 100% LAYOFFS
--- =========================================================
--- percentage_laid_off = 1 means the entire workforce
--- was laid off.
+-- ============================================================
+-- 3. COMPANIES WITH 100% WORKFORCE LAID OFF
+-- ============================================================
+-- percentage_laid_off = 1 → entire company was shut down.
+-- Ordered by size to see the biggest closures first.
 
 SELECT *
 FROM layoffs_staging2
@@ -42,10 +48,9 @@ WHERE percentage_laid_off = 1
 ORDER BY total_laid_off DESC;
 
 
--- =========================================================
--- 4. TOTAL LAYOFFS BY COMPANY
--- =========================================================
--- Identify companies responsible for the largest total layoffs.
+-- ============================================================
+-- 4. TOTAL LAYOFFS BY COMPANY (all time)
+-- ============================================================
 
 SELECT
     company,
@@ -55,10 +60,9 @@ GROUP BY company
 ORDER BY total_laid_off DESC;
 
 
--- =========================================================
+-- ============================================================
 -- 5. DATASET DATE RANGE
--- =========================================================
--- Determine the time span covered by the dataset.
+-- ============================================================
 
 SELECT
     MIN(`date`) AS earliest_date,
@@ -66,10 +70,9 @@ SELECT
 FROM layoffs_staging2;
 
 
--- =========================================================
+-- ============================================================
 -- 6. TOTAL LAYOFFS BY INDUSTRY
--- =========================================================
--- Which industries experienced the most layoffs?
+-- ============================================================
 
 SELECT
     industry,
@@ -79,10 +82,9 @@ GROUP BY industry
 ORDER BY total_laid_off DESC;
 
 
--- =========================================================
+-- ============================================================
 -- 7. TOTAL LAYOFFS BY COUNTRY
--- =========================================================
--- Compare layoffs across countries.
+-- ============================================================
 
 SELECT
     country,
@@ -92,23 +94,23 @@ GROUP BY country
 ORDER BY total_laid_off DESC;
 
 
--- =========================================================
+-- ============================================================
 -- 8. TOTAL LAYOFFS BY YEAR
--- =========================================================
--- Analyze yearly layoff trends.
+-- ============================================================
 
 SELECT
-    YEAR(`date`) AS layoff_year,
+    YEAR(`date`)        AS layoff_year,
     SUM(total_laid_off) AS total_laid_off
 FROM layoffs_staging2
 GROUP BY YEAR(`date`)
-ORDER BY layoff_year DESC;
+ORDER BY layoff_year ASC;
 
 
--- =========================================================
+-- ============================================================
 -- 9. TOTAL LAYOFFS BY FUNDING STAGE
--- =========================================================
--- Determine which company stages were most affected.
+-- ============================================================
+-- Are later-stage (Post-IPO) companies laying off more people
+-- in absolute numbers than early-stage startups?
 
 SELECT
     stage,
@@ -118,145 +120,112 @@ GROUP BY stage
 ORDER BY total_laid_off DESC;
 
 
--- =========================================================
+-- ============================================================
 -- 10. MONTHLY LAYOFF TOTALS
--- =========================================================
--- Aggregate layoffs by month.
+-- ============================================================
+-- Aggregate by YYYY-MM to see month-over-month trends.
 
 SELECT
-    SUBSTRING(`date`, 1, 7) AS `Month`,
-    SUM(total_laid_off) AS total_laid_off
+    SUBSTRING(`date`, 1, 7) AS `month`,
+    SUM(total_laid_off)     AS total_laid_off
 FROM layoffs_staging2
 WHERE SUBSTRING(`date`, 1, 7) IS NOT NULL
-GROUP BY `Month`
-ORDER BY `Month` DESC;
+GROUP BY `month`
+ORDER BY `month` ASC;
 
 
--- =========================================================
+-- ============================================================
 -- 11. ROLLING (CUMULATIVE) LAYOFF TOTAL
--- =========================================================
--- Shows how layoffs accumulated over time.
+-- ============================================================
+-- Shows how total layoffs accumulated over the entire period.
+-- Useful for visualising the overall trajectory.
 
-WITH Rolling_Total AS
-(
+WITH monthly_totals AS (
     SELECT
-        SUBSTRING(`date`, 1, 7) AS `Month`,
-        SUM(total_laid_off) AS total_off
+        SUBSTRING(`date`, 1, 7) AS `month`,
+        SUM(total_laid_off)     AS monthly_laid_off
     FROM layoffs_staging2
     WHERE SUBSTRING(`date`, 1, 7) IS NOT NULL
-    GROUP BY `Month`
+    GROUP BY `month`
 )
-
 SELECT
-    `Month`,
-    total_off,
-
-    -- Running total from earliest month onward
-    SUM(total_off) OVER (
-        ORDER BY `Month`
+    `month`,
+    monthly_laid_off,
+    SUM(monthly_laid_off) OVER (
+        ORDER BY `month`
     ) AS rolling_total
-
-FROM Rolling_Total;
-
-
--- =========================================================
--- 12. TOTAL LAYOFFS BY COMPANY
--- =========================================================
--- Repeat analysis focused solely on company rankings.
-
-SELECT
-    company,
-    SUM(total_laid_off) AS total_laid_off
-FROM layoffs_staging2
-GROUP BY company
-ORDER BY total_laid_off DESC;
+FROM monthly_totals
+ORDER BY `month` ASC;
 
 
--- =========================================================
--- 13. COMPANY LAYOFFS BY YEAR
--- =========================================================
--- Calculate yearly layoffs for each company.
+-- ============================================================
+-- 12. COMPANY LAYOFFS BROKEN DOWN BY YEAR
+-- ============================================================
 
 SELECT
     company,
-    YEAR(`date`) AS layoff_year,
+    YEAR(`date`)        AS layoff_year,
     SUM(total_laid_off) AS total_laid_off
 FROM layoffs_staging2
 GROUP BY company, YEAR(`date`)
 ORDER BY total_laid_off DESC;
 
 
--- =========================================================
--- 14. TOP 5 COMPANIES BY LAYOFFS EACH YEAR
--- =========================================================
--- Step 1:
--- Compute total layoffs for each company per year.
---
--- Step 2:
--- Rank companies within each year using DENSE_RANK().
---
--- Step 3:
--- Keep only the top 5 companies for every year.
+-- ============================================================
+-- 13. TOP 5 COMPANIES BY LAYOFFS — PER YEAR
+-- ============================================================
+-- Multi-step CTE approach:
+--   Step 1 (Company_Year):      Sum layoffs per company per year.
+--   Step 2 (Company_Year_Rank): Rank companies within each year
+--                               using DENSE_RANK().
+--   Step 3:                     Filter to top 5 per year.
 
-WITH Company_Year (company, years, total_laid_off) AS
-(
+WITH Company_Year AS (
     SELECT
         company,
-        YEAR(`date`),
-        SUM(total_laid_off)
+        YEAR(`date`)        AS `year`,
+        SUM(total_laid_off) AS total_laid_off
     FROM layoffs_staging2
     GROUP BY company, YEAR(`date`)
 ),
-
-Company_Year_Rank AS
-(
-    SELECT *,
-           DENSE_RANK() OVER (
-               PARTITION BY years
-               ORDER BY total_laid_off DESC
-           ) AS ranking
+Company_Year_Rank AS (
+    SELECT
+        company,
+        `year`,
+        total_laid_off,
+        DENSE_RANK() OVER (
+            PARTITION BY `year`
+            ORDER BY total_laid_off DESC
+        ) AS ranking
     FROM Company_Year
-    WHERE years IS NOT NULL
+    WHERE `year` IS NOT NULL
 )
-
 SELECT *
 FROM Company_Year_Rank
-WHERE ranking <= 5;
+WHERE ranking <= 5
+ORDER BY `year` ASC, ranking ASC;
 
 
--- =========================================================
--- KEY SQL CONCEPTS USED IN THIS EDA
--- =========================================================
+-- ============================================================
+-- SQL CONCEPTS USED IN THIS EDA
+-- ============================================================
 --
--- AGGREGATIONS
---   SUM()
---   MAX()
---   MIN()
+-- AGGREGATE FUNCTIONS  → SUM(), MAX(), MIN()
+-- GROUPING             → GROUP BY
+-- SORTING              → ORDER BY
+-- DATE FUNCTIONS       → YEAR(), SUBSTRING()
+-- WINDOW FUNCTIONS     → SUM() OVER(), DENSE_RANK() OVER()
+-- CTEs                 → WITH ... AS (...)
 --
--- GROUPING
---   GROUP BY
---
--- SORTING
---   ORDER BY
---
--- DATE FUNCTIONS
---   YEAR()
---   SUBSTRING()
---
--- WINDOW FUNCTIONS
---   SUM() OVER()
---   DENSE_RANK() OVER()
---
--- CTEs
---   WITH ... AS (...)
---
+-- ============================================================
 -- BUSINESS QUESTIONS ANSWERED
--- ✓ Largest layoff event
--- ✓ Companies with complete workforce layoffs
--- ✓ Most affected companies
+-- ============================================================
+-- ✓ Largest single layoff event
+-- ✓ Companies that shut down completely
+-- ✓ Most affected companies (all-time)
 -- ✓ Most affected industries
 -- ✓ Most affected countries
--- ✓ Yearly layoff trends
--- ✓ Monthly layoff trends
--- ✓ Running cumulative layoffs
--- ✓ Top companies by layoffs each year
+-- ✓ Year-over-year layoff trends
+-- ✓ Month-over-month layoff trends
+-- ✓ Running cumulative layoff total
+-- ✓ Top 5 companies by layoffs each year
